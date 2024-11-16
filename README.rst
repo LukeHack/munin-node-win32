@@ -1,13 +1,6 @@
-============================
-Munin Node for Windows
-============================
-
-**Active development of this repo has been stopped**
-**New contributors are welcome to submit pull requests if you want to help revive this project**
-** - singularcitrus**
-
-If you wish to follow the development of the new Munin Node for Windows, go to `this repository
-<https://github.com/munin-monitoring/munin-node-windows/>`_
+========================================================
+Munin Node for Windows - IPV6 exclusive version
+========================================================
 
 Introduction
 ------------
