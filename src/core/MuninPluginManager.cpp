@@ -42,7 +42,6 @@
 #include "../plugins/disk/SMART/PowerOffRetractMuninNodePlugin.h"
 //----------
 #include "../plugins/disk/SMARTMuninNodePlugin.h"
-#include "../plugins/speedfan/SpeedFanNodePlugin.h"
 #include "../plugins/PerfCounterMuninNodePlugin.h"
 #include "../plugins/external/ExternalMuninNodePlugin.h"
 
@@ -117,10 +116,7 @@ MuninPluginManager::MuninPluginManager()
   //---------------------
 
   if (g_Config.GetValueB("Plugins", "SMART", false))
-    AddPlugin(new SMARTMuninNodePlugin());
-  
-  if (g_Config.GetValueB("Plugins", "SpeedFan", false))
-    AddPlugin(new SpeedFanNodePlugin());
+      AddPlugin(new SMARTMuninNodePlugin());
   
   if (g_Config.GetValueB("Plugins", "External", true)) {
     int externalTimeout = g_Config.GetValueI("Plugins", "ExternalTimeout", 0);

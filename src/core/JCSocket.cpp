@@ -18,20 +18,34 @@
 
 #include "StdAfx.h"
 #include "JCSocket.h"
+#undef UNICODE
+
+#define WIN32_LEAN_AND_MEAN
+
+#include <ws2tcpip.h> 
+#include <Winsock2.h>
+#include <iostream>
+#include <string>
+#include <stdlib.h>
+#include <ws2ipdef.h>
+
+#pragma comment(lib, "Ws2_32.lib")
+
+#define STRICMP _stricmp
 
 int JCSocket::m_RefCount = 0;
 
 JCSocket::JCSocket()
 {
-  WSADATA wd;
+  WSADATA wsaData;
 
   if (++m_RefCount == 1)
   {
-    ::WSAStartup(0x0101, &wd);
+      WSAStartup(MAKEWORD(2, 2), &wsaData);
   }
-  memset(&m_Address, 0, sizeof(m_Address));
-  memset(&m_FromAddress, 0, sizeof(m_FromAddress));
-  m_hSocket = NULL;
+
+  strncpy(m_Address.sa_data, "::", 2);
+  m_hSocket = NULL; 
 }
 
 
@@ -48,64 +62,48 @@ JCSocket::~JCSocket()
 
 bool JCSocket::Create( int af, ProtocolType type )
 {
-  switch (type) 
-  {
+    switch (type)
+    {
     case TCP:
-      m_hSocket = ::socket( af, SOCK_STREAM, IPPROTO_TCP );
-      break;
+        m_hSocket = ::socket(af, SOCK_STREAM, IPPROTO_TCP);
+        break;
     case UDP:
-      m_hSocket = ::socket( af, SOCK_DGRAM, IPPROTO_UDP );
-      break;
+        m_hSocket = ::socket(af, SOCK_DGRAM, IPPROTO_UDP);
+        break;
     default:
-      assert(false);
-  };
+        assert(false);
+    };
 
-  if( m_hSocket == INVALID_SOCKET )
-  {
-    return false;
-  }
-  else
-  {
-    return true;
-  }
+    if (m_hSocket == INVALID_SOCKET)
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
 }
 
 
 bool JCSocket::Connect( const char *host, int nPort )
 {
-  unsigned long ulAddr = 0;
-  hostent *pEnt = ::gethostbyname( host );
-  SOCKADDR_IN addr;
+  ADDRINFO Hints, * AddrInfo;  
+  char Port[10];
 
-  if( pEnt == 0 )
-  {
-    ulAddr = ::inet_addr( host );
+  itoa(nPort, Port, 10);
+ 
+  Hints.ai_family = AF_INET6;
+  Hints.ai_socktype = SOCK_STREAM;
+  Hints.ai_flags = AI_NUMERICHOST | AI_PASSIVE; 
 
-    if( ulAddr == INADDR_NONE )
-    {
-#ifdef _DEBUG
-      printf("Invalid address passed to JCSocket::Connect!");
-#endif
-      return false;
-    }
-    else
-    {
-      addr.sin_family = AF_INET;
-    }
-  }
-  else
-  {
-    memcpy( &ulAddr, pEnt->h_addr_list[0], sizeof( long ) );
-
-    addr.sin_family = pEnt->h_addrtype;
+  auto RetVal = getaddrinfo(host, Port, &Hints, &AddrInfo);
+  if (RetVal != 0) {
+      fprintf(stderr, "getaddrinfo failed with error %d: %s\n",
+          RetVal, gai_strerror(RetVal));
+      WSACleanup();
   }
 
-  addr.sin_addr.s_addr = ulAddr;
-  addr.sin_port = ::htons( nPort );
-
-  memset( addr.sin_zero, 0, sizeof( addr.sin_zero ) );
-
-  if( ::connect( m_hSocket, (const sockaddr *)&addr, sizeof( SOCKADDR_IN ) ) == SOCKET_ERROR )
+  if( connect( m_hSocket, AddrInfo->ai_addr, (int)AddrInfo->ai_addrlen) == SOCKET_ERROR )
   {
     return false;
   }
@@ -118,33 +116,66 @@ bool JCSocket::Connect( const char *host, int nPort )
 
 bool JCSocket::Bind(int nLocalPort, const char *address)
 {
-	m_Address.sin_addr.s_addr = ::htonl(address ? inet_addr(address) : INADDR_ANY);
-  m_Address.sin_family = AF_INET;
-  m_Address.sin_port = ::htons(nLocalPort);
-  memset(m_Address.sin_zero, 0, sizeof(m_Address.sin_zero));
+    char Port[10];
+    char* Address = NULL;
+    int i, isBound;
+    ADDRINFO Hints, * AddrInfo, * AI;
+    SOCKET ServSock[FD_SETSIZE];
 
-  if( ::bind( m_hSocket, (const sockaddr *)&m_Address, sizeof( SOCKADDR_IN ) ) == SOCKET_ERROR )
-  {
+    itoa(nLocalPort, Port, 10);
+    strncpy(m_Address.sa_data, address ? address : "::", address ? sizeof(address) : 3);
+
+    memset(&Hints, 0, sizeof(Hints));
+    Hints.ai_family = PF_INET6;
+    Hints.ai_socktype = SOCK_STREAM;
+    Hints.ai_flags = AI_NUMERICHOST | AI_PASSIVE;
+    getaddrinfo(Address, Port, &Hints, &AddrInfo);
+
+    for (i = 0, AI = AddrInfo; AI != NULL; AI = AI->ai_next) {
+
+        if (i == FD_SETSIZE) {
+            printf("getaddrinfo returned more addresses than we could use.\n");
+            break;
+        }
+        if ((AI->ai_family != PF_INET) && (AI->ai_family != PF_INET6))
+            continue;
+
+        ServSock[i] = socket(AI->ai_family, AI->ai_socktype, AI->ai_protocol);
+        if (ServSock[i] == INVALID_SOCKET) {
+            fprintf(stderr, "socket() failed with error %d: \n", WSAGetLastError());
+            continue;
+        }
+
+        isBound = bind(ServSock[i], AI->ai_addr, (int)AI->ai_addrlen);
+        if (isBound == SOCKET_ERROR)
+        {
+            closesocket(ServSock[i]);
+            continue;
+        }
+        else
+        {
+            m_hSocket = ServSock[i];
+            return true;
+        }
+    }
+
     return false;
-  }
-  else
-  {
-    return true;
-  }
 }
 
 
 bool JCSocket::Accept( JCSocket *pSocket )
 {
+    sockaddr_storage From;
+
   if( pSocket == NULL )
   {
     return false;
   }
 
-  int len = sizeof( SOCKADDR_IN );
-  memset( &pSocket->m_Address, 0, sizeof( SOCKADDR_IN ) );
+  int len = sizeof(From);
+  strncpy(pSocket->m_Address.sa_data, "::", 3);
 
-  pSocket->m_hSocket = ::accept( m_hSocket, (sockaddr*)&pSocket->m_Address, &len );
+  pSocket->m_hSocket = accept(m_hSocket, (LPSOCKADDR)&From, &len);
 
   if( pSocket->m_hSocket == INVALID_SOCKET )
   {
@@ -224,10 +255,10 @@ int JCSocket::RecvLine( char *pszBuf, int nLen, bool bEcho )
   return nCount ? nCount : nRdLen;
 }
 
-int JCSocket::RecvFrom(void *pData, int nDataLen, int nFlags)
+int JCSocket::RecvFrom(void* pData, int nDataLen, int nFlags)
 {
-  int fromAddressLen = sizeof(m_FromAddress);
-  return ::recvfrom( m_hSocket, (char *)pData, nDataLen, nFlags, (sockaddr *)&m_FromAddress, &fromAddressLen );
+    int fromAddressLen = sizeof(m_FromAddress);
+    return ::recvfrom(m_hSocket, (char*)pData, nDataLen, nFlags, (sockaddr*)&m_FromAddress, &fromAddressLen);
 }
 
 bool JCSocket::Shutdown( int nHow )

@@ -1260,10 +1260,7 @@ template <class CHART> CPosixElxT <CHART> :: CPosixElxT(const char * posix, int 
 	else                                  m_posixfun = 0         ;
 }
 
-inline int isblank(int c)
-{
-	return c == 0x20 || c == '\t';
-}
+
 
 template <class CHART> int CPosixElxT <CHART> :: Match(CContext * pContext) const
 {

@@ -21,13 +21,14 @@ public:
   virtual int SendText(const char *pszText);
   virtual int Recv(void *pData, int nDataLen, int nFlags = 0);
   virtual int RecvLine(char *pszBuf, int nLen, bool bEcho = false);
-  virtual int RecvFrom(void *pData, int nDataLen, int nFlags = 0);
+  virtual int RecvFrom(void* pData, int nDataLen, int nFlags = 0);
   virtual bool Shutdown(int nHow);
   virtual bool Close();
 
   SOCKET m_hSocket;
-  SOCKADDR_IN m_Address;
-  SOCKADDR_IN m_FromAddress;
+  sockaddr m_Address;
+  sockaddr m_FromAddress;
+
 private:
   static int m_RefCount;
 };

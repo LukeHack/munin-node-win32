@@ -20,6 +20,7 @@
 #include "MuninNodeServer.h"
 #include "MuninNodeSettings.h"
 #include "Service.h"
+#include <ws2tcpip.h> 
 
 void MuninNodeServer::Stop()
 {
@@ -60,8 +61,13 @@ void *MuninNodeServer::Entry()
     // Wait for new client connection
     JCSocket *client = new JCSocket();
     if (m_ServerSocket.Accept(client)) {
-      // TODO: Add ip address matching, http://stackoverflow.com/questions/594112/matching-an-ip-to-a-cidr-mask-in-php5
-      const char *ipAddress = inet_ntoa(client->m_Address.sin_addr);
+        int FromLen = sizeof(sockaddr);
+        char Hostname[NI_MAXHOST];
+        
+        getnameinfo((LPSOCKADDR)&client->m_Address, FromLen, Hostname, sizeof(Hostname), NULL, 0, NI_NUMERICHOST);
+
+        const char* ipAddress = Hostname;
+
       if ( !ipAddress )
         ipAddress = "unknown address";
         if (masterAddress == "*" || ipAddress == masterAddress) {
